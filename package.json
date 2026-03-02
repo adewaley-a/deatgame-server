@@ -1,0 +1,26 @@
+{
+  "name": "deatgame-server",
+  "version": "1.0.0",
+  "description": "��#\u0000 \u0000d\u0000e\u0000a\u0000t\u0000g\u0000a\u0000m\u0000e\u0000-\u0000s\u0000e\u0000r\u0000v\u0000e\u0000r\u0000\r\u0000 \u0000",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adewaley-a/deatgame-server.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/adewaley-a/deatgame-server/issues"
+  },
+  "homepage": "https://github.com/adewaley-a/deatgame-server#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  }
+}
