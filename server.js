@@ -8,11 +8,7 @@ app.use(cors());
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: {
-    // Wildcard ensures no more "trailing slash" CORS errors
-    origin: "https://deatwin.netlify.app", 
-    methods: ["GET", "POST"]
-  }
+  cors: { origin: "https://deatwin.netlify.app", methods: ["GET", "POST"] }
 });
 
 const rooms = {};
@@ -20,18 +16,17 @@ const rooms = {};
 io.on('connection', (socket) => {
   socket.on('join_game', ({ roomId }) => {
     socket.join(roomId);
-    if (!rooms[roomId]) rooms[roomId] = { players: {}, health: { host: 400, guest: 400 } };
-
+    if (!rooms[roomId]) {
+      rooms[roomId] = { players: {}, health: { host: 400, guest: 400 } };
+    }
     const role = Object.keys(rooms[roomId].players).length === 0 ? 'host' : 'guest';
     rooms[roomId].players[socket.id] = { role };
-
     socket.emit('assign_role', { role });
     io.in(roomId).emit('update_health', rooms[roomId].health);
   });
 
   socket.on('move', (data) => {
-    // Just pass the data to the opponent
-    socket.to(data.roomId).emit('opp_move', { x: data.x, y: data.y });
+    socket.to(data.roomId).emit('opp_move', data);
   });
 
   socket.on('fire', (data) => {
@@ -40,14 +35,12 @@ io.on('connection', (socket) => {
 
   socket.on('take_damage', ({ roomId, victimRole }) => {
     if (rooms[roomId]) {
-      rooms[roomId].health[victimRole] = Math.max(0, rooms[roomId].health[victimRole] - 10);
+      rooms[roomId].health[victimRole] = Math.max(0, rooms[roomId].health[victimRole] - 2);
       io.in(roomId).emit('update_health', rooms[roomId].health);
     }
   });
 
-  socket.on('disconnect', () => {
-    // Cleanup logic
-  });
+  socket.on('disconnect', () => { /* Room cleanup logic */ });
 });
 
 server.listen(process.env.PORT || 3001);
