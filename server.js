@@ -13,7 +13,7 @@ const H = 700;
 
 const io = new Server(server, {
   cors: {
-    origin: "https://deatwin.netlify.app/", // Use "*" for testing; update to your frontend URL later
+    origin: "https://deatwin.netlify.app", // Use "*" for testing; update to your frontend URL later
     methods: ["GET", "POST"]
   }
 });
