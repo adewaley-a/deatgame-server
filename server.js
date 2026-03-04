@@ -35,12 +35,13 @@ io.on('connection', (socket) => {
 
   socket.on('take_damage', ({ roomId, victimRole }) => {
     if (rooms[roomId]) {
+      // Corrected to 2HP damage per collision
       rooms[roomId].health[victimRole] = Math.max(0, rooms[roomId].health[victimRole] - 2);
       io.in(roomId).emit('update_health', rooms[roomId].health);
     }
   });
 
-  socket.on('disconnect', () => { /* Room cleanup logic */ });
+  socket.on('disconnect', () => { /* Add cleanup if needed */ });
 });
 
 server.listen(process.env.PORT || 3001);
