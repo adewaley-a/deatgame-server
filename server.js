@@ -26,23 +26,23 @@ io.on('connection', (socket) => {
   });
 
   socket.on('move', (data) => {
-    socket.to(data.roomId).emit('opp_move', { x: data.x, y: data.y });
+    socket.to(data.roomId).emit('opp_move', data);
   });
 
   socket.on('fire', (data) => {
-    // Forward the bullet spawn to the other player
+    // Send bullet data to the other player
     socket.to(data.roomId).emit('incoming_bullet', data);
   });
 
   socket.on('take_damage', ({ roomId, victimRole }) => {
     if (rooms[roomId]) {
-      // 2HP damage per collision
+      // 2HP damage per hit
       rooms[roomId].health[victimRole] = Math.max(0, rooms[roomId].health[victimRole] - 2);
       io.in(roomId).emit('update_health', rooms[roomId].health);
     }
   });
 
-  socket.on('disconnect', () => { /* Room cleanup logic */ });
+  socket.on('disconnect', () => { /* Cleanup logic */ });
 });
 
 server.listen(process.env.PORT || 3001);
