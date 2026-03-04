@@ -30,13 +30,12 @@ io.on('connection', (socket) => {
   });
 
   socket.on('fire', (data) => {
-    // Only send to the opponent, NOT the sender
     socket.to(data.roomId).emit('incoming_bullet', data);
   });
 
   socket.on('take_damage', ({ roomId, victimRole }) => {
     if (rooms[roomId]) {
-      // 2HP reduction as requested
+      // 2HP subtraction as requested
       rooms[roomId].health[victimRole] = Math.max(0, rooms[roomId].health[victimRole] - 2);
       io.in(roomId).emit('update_health', rooms[roomId].health);
     }
