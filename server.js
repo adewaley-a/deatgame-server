@@ -15,22 +15,15 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     
     if (!rooms[roomId]) {
-      rooms[roomId] = { 
-        players: {}, 
-        health: { host: 400, guest: 400 } 
-      };
+      rooms[roomId] = { players: {}, health: { host: 400, guest: 400 } };
     }
 
-    // Assign role based on who is already there
-    const existingPlayers = Object.keys(rooms[roomId].players);
-    const role = existingPlayers.length === 0 ? 'host' : 'guest';
+    // Role assignment: 1st connection = host, others = guest
+    const clients = io.sockets.adapter.rooms.get(roomId);
+    const role = (clients && clients.size === 1) ? 'host' : 'guest';
     
     rooms[roomId].players[socket.id] = role;
-
-    // Send the role back to ONLY this specific user
     socket.emit('assign_role', { role });
-    
-    // Send current health state to everyone
     io.in(roomId).emit('update_health', rooms[roomId].health);
   });
 
@@ -49,8 +42,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {
-    // Optional: handle player leaving logic here
+  socket.on('disconnecting', () => {
+    // Basic cleanup
   });
 });
 
