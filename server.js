@@ -18,12 +18,16 @@ io.on('connection', (socket) => {
       rooms[roomId] = { players: {}, health: { host: 400, guest: 400 } };
     }
 
-    // Role assignment: 1st connection = host, others = guest
+    // Role Assignment Logic
     const clients = io.sockets.adapter.rooms.get(roomId);
-    const role = (clients && clients.size === 1) ? 'host' : 'guest';
+    const numPlayers = clients ? clients.size : 0;
+    
+    // First person is host, everyone else is guest
+    const role = numPlayers === 1 ? 'host' : 'guest';
     
     rooms[roomId].players[socket.id] = role;
     socket.emit('assign_role', { role });
+    
     io.in(roomId).emit('update_health', rooms[roomId].health);
   });
 
@@ -42,9 +46,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnecting', () => {
-    // Basic cleanup
-  });
+  socket.on('disconnect', () => {});
 });
 
 server.listen(process.env.PORT || 3001);
