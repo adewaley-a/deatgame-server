@@ -13,12 +13,21 @@ const rooms = {};
 io.on('connection', (socket) => {
   socket.on('join_game', ({ roomId }) => {
     socket.join(roomId);
+    
     if (!rooms[roomId]) {
       rooms[roomId] = { players: {}, health: { host: 400, guest: 400 } };
     }
+
+    // Role Assignment Logic
     const clients = io.sockets.adapter.rooms.get(roomId);
-    const role = (clients && clients.size === 1) ? 'host' : 'guest';
+    const numPlayers = clients ? clients.size : 0;
+    
+    // First person is host, everyone else is guest
+    const role = numPlayers === 1 ? 'host' : 'guest';
+    
+    rooms[roomId].players[socket.id] = role;
     socket.emit('assign_role', { role });
+    
     io.in(roomId).emit('update_health', rooms[roomId].health);
   });
 
