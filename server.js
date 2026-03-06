@@ -23,12 +23,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('move', (data) => {
-    // data includes { x, y, angle }
     socket.to(data.roomId).emit('opp_move', data);
   });
 
   socket.on('fire', (data) => {
-    // data includes { x, y, angle, vx, vy }
     socket.to(data.roomId).emit('incoming_bullet', data);
   });
 
