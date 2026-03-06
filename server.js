@@ -15,19 +15,20 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     
     if (!rooms[roomId]) {
-      rooms[roomId] = { players: {}, health: { host: 400, guest: 400 } };
+      rooms[roomId] = { 
+        hostId: socket.id, // Explicitly track who is host
+        guestId: null,
+        health: { host: 400, guest: 400 } 
+      };
+      socket.emit('assign_role', { role: 'host' });
+    } else if (!rooms[roomId].guestId) {
+      rooms[roomId].guestId = socket.id;
+      socket.emit('assign_role', { role: 'guest' });
+    } else {
+      // Third person joins as spectator or just gets 'guest'
+      socket.emit('assign_role', { role: 'guest' });
     }
 
-    // Role Assignment Logic
-    const clients = io.sockets.adapter.rooms.get(roomId);
-    const numPlayers = clients ? clients.size : 0;
-    
-    // First person is host, everyone else is guest
-    const role = numPlayers === 1 ? 'host' : 'guest';
-    
-    rooms[roomId].players[socket.id] = role;
-    socket.emit('assign_role', { role });
-    
     io.in(roomId).emit('update_health', rooms[roomId].health);
   });
 
@@ -46,7 +47,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {});
+  socket.on('disconnect', () => {
+    // Basic cleanup logic could go here
+  });
 });
 
 server.listen(process.env.PORT || 3001);
