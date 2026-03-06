@@ -15,18 +15,20 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     
     if (!rooms[roomId]) {
+      // First person joins
       rooms[roomId] = { 
-        hostId: socket.id, // Explicitly track who is host
-        guestId: null,
+        host: socket.id, 
+        guest: null, 
         health: { host: 400, guest: 400 } 
       };
       socket.emit('assign_role', { role: 'host' });
-    } else if (!rooms[roomId].guestId) {
-      rooms[roomId].guestId = socket.id;
+    } else if (!rooms[roomId].guest) {
+      // Second person joins
+      rooms[roomId].guest = socket.id;
       socket.emit('assign_role', { role: 'guest' });
     } else {
-      // Third person joins as spectator or just gets 'guest'
-      socket.emit('assign_role', { role: 'guest' });
+      // Already full
+      socket.emit('assign_role', { role: 'spectator' });
     }
 
     io.in(roomId).emit('update_health', rooms[roomId].health);
@@ -41,14 +43,20 @@ io.on('connection', (socket) => {
   });
 
   socket.on('take_damage', ({ roomId, victimRole }) => {
-    if (rooms[roomId]) {
+    if (rooms[roomId] && rooms[roomId].health[victimRole] !== undefined) {
       rooms[roomId].health[victimRole] = Math.max(0, rooms[roomId].health[victimRole] - 2);
       io.in(roomId).emit('update_health', rooms[roomId].health);
     }
   });
 
-  socket.on('disconnect', () => {
-    // Basic cleanup logic could go here
+  socket.on('disconnecting', () => {
+    // Basic cleanup when a player leaves
+    for (const roomId of socket.rooms) {
+      if (rooms[roomId]) {
+        if (rooms[roomId].host === socket.id) rooms[roomId].host = null;
+        if (rooms[roomId].guest === socket.id) rooms[roomId].guest = null;
+      }
+    }
   });
 });
 
