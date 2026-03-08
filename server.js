@@ -13,13 +13,8 @@ const rooms = {};
 io.on('connection', (socket) => {
   socket.on('join_game', ({ roomId }) => {
     socket.join(roomId);
-    
     if (!rooms[roomId]) {
-      rooms[roomId] = { 
-        host: socket.id, 
-        guest: null, 
-        health: { host: 400, guest: 400 } 
-      };
+      rooms[roomId] = { host: socket.id, guest: null, health: { host: 400, guest: 400 } };
       socket.emit('assign_role', { role: 'host' });
     } else if (!rooms[roomId].guest && rooms[roomId].host !== socket.id) {
       rooms[roomId].guest = socket.id;
@@ -29,10 +24,12 @@ io.on('connection', (socket) => {
   });
 
   socket.on('move', (data) => {
+    // Passes {roomId, x, y, rot}
     socket.to(data.roomId).emit('opp_move', data);
   });
 
   socket.on('fire', (data) => {
+    // Passes {roomId, x, y, vx, vy, rot}
     socket.to(data.roomId).emit('incoming_bullet', data);
   });
 
