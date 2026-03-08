@@ -15,7 +15,7 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     
     if (!rooms[roomId]) {
-      // First person joins
+      // Initialize room with the first player as host
       rooms[roomId] = { 
         host: socket.id, 
         guest: null, 
@@ -23,14 +23,12 @@ io.on('connection', (socket) => {
       };
       socket.emit('assign_role', { role: 'host' });
     } else if (!rooms[roomId].guest) {
-      // Second person joins
+      // Second player is guest
       rooms[roomId].guest = socket.id;
       socket.emit('assign_role', { role: 'guest' });
-    } else {
-      // Already full
-      socket.emit('assign_role', { role: 'spectator' });
     }
 
+    // Broadcast current health state to everyone in room
     io.in(roomId).emit('update_health', rooms[roomId].health);
   });
 
@@ -43,20 +41,15 @@ io.on('connection', (socket) => {
   });
 
   socket.on('take_damage', ({ roomId, victimRole }) => {
-    if (rooms[roomId] && rooms[roomId].health[victimRole] !== undefined) {
+    if (rooms[roomId]) {
+      // Update the specific role's health
       rooms[roomId].health[victimRole] = Math.max(0, rooms[roomId].health[victimRole] - 2);
       io.in(roomId).emit('update_health', rooms[roomId].health);
     }
   });
 
   socket.on('disconnecting', () => {
-    // Basic cleanup when a player leaves
-    for (const roomId of socket.rooms) {
-      if (rooms[roomId]) {
-        if (rooms[roomId].host === socket.id) rooms[roomId].host = null;
-        if (rooms[roomId].guest === socket.id) rooms[roomId].guest = null;
-      }
-    }
+    // Basic cleanup logic could be added here
   });
 });
 
