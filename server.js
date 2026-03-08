@@ -24,12 +24,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('move', (data) => {
-    // Passes {roomId, x, y, rot}
     socket.to(data.roomId).emit('opp_move', data);
   });
 
   socket.on('fire', (data) => {
-    // Passes {roomId, x, y, vx, vy, rot}
     socket.to(data.roomId).emit('incoming_bullet', data);
   });
 
