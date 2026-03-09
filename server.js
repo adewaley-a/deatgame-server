@@ -6,7 +6,9 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "https://deatwin.netlify.app" } });
+const io = new Server(server, { 
+  cors: { origin: "https://deatwin.netlify.app" } 
+});
 
 const rooms = {};
 
@@ -20,9 +22,8 @@ io.on('connection', (socket) => {
       rooms[roomId].guest = socket.id;
       socket.emit('assign_role', { role: 'guest' });
     } else {
-        // If third person joins or reconnects, re-check role
-        if(socket.id === rooms[roomId].host) socket.emit('assign_role', { role: 'host' });
-        else if(socket.id === rooms[roomId].guest) socket.emit('assign_role', { role: 'guest' });
+      if (socket.id === rooms[roomId].host) socket.emit('assign_role', { role: 'host' });
+      else if (socket.id === rooms[roomId].guest) socket.emit('assign_role', { role: 'guest' });
     }
     io.in(roomId).emit('update_health', rooms[roomId].health);
   });
