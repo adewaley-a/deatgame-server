@@ -16,16 +16,19 @@ io.on('connection', (socket) => {
     if (!rooms[roomId]) {
       rooms[roomId] = { host: socket.id, guest: null, health: { host: 400, guest: 400 } };
       socket.emit('assign_role', { role: 'host' });
-    } else if (!rooms[roomId].guest && socket.id !== rooms[roomId].host) {
+    } else if (!rooms[roomId].guest && rooms[roomId].host !== socket.id) {
       rooms[roomId].guest = socket.id;
       socket.emit('assign_role', { role: 'guest' });
+    } else {
+        // If third person joins or reconnects, re-check role
+        if(socket.id === rooms[roomId].host) socket.emit('assign_role', { role: 'host' });
+        else if(socket.id === rooms[roomId].guest) socket.emit('assign_role', { role: 'guest' });
     }
     io.in(roomId).emit('update_health', rooms[roomId].health);
   });
 
   socket.on('move', (data) => socket.to(data.roomId).emit('opp_move', data));
   socket.on('fire', (data) => socket.to(data.roomId).emit('incoming_bullet', data));
-  
   socket.on('take_damage', ({ roomId, victimRole }) => {
     if (rooms[roomId]) {
       rooms[roomId].health[victimRole] = Math.max(0, rooms[roomId].health[victimRole] - 2);
