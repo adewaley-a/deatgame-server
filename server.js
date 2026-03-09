@@ -6,14 +6,13 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } }); // Adjusted for flexibility
+const io = new Server(server, { cors: { origin: "*" } });
 
 const rooms = {};
 
 io.on('connection', (socket) => {
   socket.on('join_game', ({ roomId }) => {
     socket.join(roomId);
-    
     if (!rooms[roomId]) {
       rooms[roomId] = { host: socket.id, guest: null, health: { host: 400, guest: 400 } };
       socket.emit('assign_role', { role: 'host' });
@@ -21,7 +20,6 @@ io.on('connection', (socket) => {
       rooms[roomId].guest = socket.id;
       socket.emit('assign_role', { role: 'guest' });
     }
-    
     io.in(roomId).emit('update_health', rooms[roomId].health);
   });
 
@@ -29,14 +27,19 @@ io.on('connection', (socket) => {
   socket.on('fire', (data) => socket.to(data.roomId).emit('incoming_bullet', data));
   
   socket.on('take_damage', ({ roomId, victimRole }) => {
-    if (rooms[roomId] && rooms[roomId].health[victimRole] !== undefined) {
-      rooms[roomId].health[victimRole] = Math.max(0, rooms[roomId].health[victimRole] - 5);
+    if (rooms[roomId]) {
+      rooms[roomId].health[victimRole] = Math.max(0, rooms[roomId].health[victimRole] - 10);
       io.in(roomId).emit('update_health', rooms[roomId].health);
     }
   });
 
   socket.on('disconnect', () => {
-    // Basic cleanup could go here if needed
+    for (const rid in rooms) {
+      if (rooms[rid].host === socket.id || rooms[rid].guest === socket.id) {
+        delete rooms[rid];
+        io.in(rid).emit('player_disconnected');
+      }
+    }
   });
 });
 
