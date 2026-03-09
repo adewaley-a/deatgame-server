@@ -27,7 +27,7 @@ io.on('connection', (socket) => {
   socket.on('fire', (data) => socket.to(data.roomId).emit('incoming_bullet', data));
   
   socket.on('take_damage', ({ roomId, victimRole }) => {
-    if (rooms[roomId]) {
+    if (rooms[roomId] && rooms[roomId].health[victimRole] !== undefined) {
       rooms[roomId].health[victimRole] = Math.max(0, rooms[roomId].health[victimRole] - 10);
       io.in(roomId).emit('update_health', rooms[roomId].health);
     }
