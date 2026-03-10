@@ -15,10 +15,12 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     if (!rooms[roomId]) {
       rooms[roomId] = { 
-        host: socket.id, guest: null, 
+        host: socket.id, 
+        guest: null, 
         health: { host: 400, guest: 400 }, 
         boxHealth: { host: 200, guest: 200 },
-        shieldHealth: { host: 150, guest: 150 }
+        shieldHealth: { host: 150, guest: 150 },
+        gameEnded: false
       };
       socket.emit('assign_role', { role: 'host' });
     } else {
@@ -34,7 +36,8 @@ io.on('connection', (socket) => {
   
   socket.on('take_damage', ({ roomId, target, victimRole, amount = 5 }) => {
     const r = rooms[roomId];
-    if (!r) return;
+    if (!r || r.gameEnded) return;
+    
     const attacker = victimRole === 'host' ? 'guest' : 'host';
     let targetHit = null;
 
@@ -43,11 +46,13 @@ io.on('connection', (socket) => {
     } else if (target === 'box') {
       targetHit = 'box';
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
-      r.health[attacker] = Math.min(400, r.health[attacker] + amount);
+      const healAmt = Math.floor(amount / 2);
+      r.health[attacker] = Math.min(400, r.health[attacker] + healAmt);
     } else if (target === 'shield') {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     }
-    
+
+    if (r.health.host <= 0 || r.health.guest <= 0) r.gameEnded = true;
     io.in(roomId).emit('update_game_state', { ...r, targetHit, attacker });
   });
 
