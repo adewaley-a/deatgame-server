@@ -52,21 +52,13 @@ io.on('connection', (socket) => {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     }
 
-    if (r.health.host <= 0 || r.health.guest <= 0) {
-      r.gameEnded = true;
-    }
-    
+    if (r.health.host <= 0 || r.health.guest <= 0) r.gameEnded = true;
     io.in(roomId).emit('update_game_state', { ...r, targetHit, attacker });
   });
 
   socket.on('disconnect', () => {
-    for (const rid in rooms) {
-      if (rooms[rid].host === socket.id || rooms[rid].guest === socket.id) {
-        delete rooms[rid];
-      }
-    }
+    for (const rid in rooms) if (rooms[rid].host === socket.id || rooms[rid].guest === socket.id) delete rooms[rid];
   });
 });
 
-const PORT = process.env.PORT || 3001;
-server.listen(PORT);
+server.listen(process.env.PORT || 3001);
