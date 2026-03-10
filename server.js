@@ -30,21 +30,22 @@ io.on('connection', (socket) => {
 
   socket.on('move', (d) => socket.to(d.roomId).emit('opp_move', d));
   socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
+  socket.on('throw_grenade', (d) => socket.to(d.roomId).emit('incoming_grenade', d));
   
-  socket.on('take_damage', ({ roomId, target, victimRole }) => {
+  socket.on('take_damage', ({ roomId, target, victimRole, amount = 5 }) => {
     const r = rooms[roomId];
     if (!r) return;
     const attacker = victimRole === 'host' ? 'guest' : 'host';
     let targetHit = null;
 
     if (target === 'player') {
-      r.health[victimRole] = Math.max(0, r.health[victimRole] - 5);
+      r.health[victimRole] = Math.max(0, r.health[victimRole] - amount);
     } else if (target === 'box') {
       targetHit = 'box';
-      r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
-      r.health[attacker] = Math.min(400, r.health[attacker] + 5);
+      r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
+      r.health[attacker] = Math.min(400, r.health[attacker] + amount);
     } else if (target === 'shield') {
-      r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
+      r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     }
     
     io.in(roomId).emit('update_game_state', { ...r, targetHit, attacker });
