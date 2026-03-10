@@ -21,27 +21,29 @@ io.on('connection', (socket) => {
         shieldHealth: { host: 150, guest: 150 }
       };
       socket.emit('assign_role', { role: 'host' });
-    } else if (!rooms[roomId].guest && socket.id !== rooms[roomId].host) {
+    } else {
       rooms[roomId].guest = socket.id;
       socket.emit('assign_role', { role: 'guest' });
     }
     io.in(roomId).emit('update_game_state', rooms[roomId]);
   });
 
-  socket.on('move', (data) => socket.to(data.roomId).emit('opp_move', data));
-  socket.on('fire', (data) => socket.to(data.roomId).emit('incoming_bullet', data));
+  socket.on('move', (d) => socket.to(d.roomId).emit('opp_move', d));
+  socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
   
   socket.on('take_damage', ({ roomId, target, victimRole }) => {
     const r = rooms[roomId];
     if (!r) return;
     const attacker = victimRole === 'host' ? 'guest' : 'host';
 
-    if (target === 'player') r.health[victimRole] = Math.max(0, r.health[victimRole] - 10);
-    else if (target === 'box') {
+    // All damage strictly set to 5 HP
+    if (target === 'player') {
+      r.health[victimRole] = Math.max(0, r.health[victimRole] - 5);
+    } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
       r.health[attacker] = Math.min(400, r.health[attacker] + 5);
     } else if (target === 'shield') {
-      r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 8);
+      r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
     }
     io.in(roomId).emit('update_game_state', r);
   });
