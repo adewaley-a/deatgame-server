@@ -35,17 +35,19 @@ io.on('connection', (socket) => {
     const r = rooms[roomId];
     if (!r) return;
     const attacker = victimRole === 'host' ? 'guest' : 'host';
+    let targetHit = null;
 
-    // All damage strictly set to 5 HP
     if (target === 'player') {
       r.health[victimRole] = Math.max(0, r.health[victimRole] - 5);
     } else if (target === 'box') {
+      targetHit = 'box';
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
       r.health[attacker] = Math.min(400, r.health[attacker] + 5);
     } else if (target === 'shield') {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
     }
-    io.in(roomId).emit('update_game_state', r);
+    
+    io.in(roomId).emit('update_game_state', { ...r, targetHit, attacker });
   });
 
   socket.on('disconnect', () => {
