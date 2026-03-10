@@ -17,7 +17,8 @@ io.on('connection', (socket) => {
       rooms[roomId] = { 
         host: socket.id, guest: null, 
         health: { host: 400, guest: 400 }, 
-        boxHealth: { host: 200, guest: 200 } 
+        boxHealth: { host: 200, guest: 200 },
+        shieldHealth: { host: 150, guest: 150 }
       };
       socket.emit('assign_role', { role: 'host' });
     } else if (!rooms[roomId].guest && socket.id !== rooms[roomId].host) {
@@ -33,23 +34,20 @@ io.on('connection', (socket) => {
   socket.on('take_damage', ({ roomId, target, victimRole }) => {
     const r = rooms[roomId];
     if (!r) return;
-    const attackerRole = victimRole === 'host' ? 'guest' : 'host';
+    const attacker = victimRole === 'host' ? 'guest' : 'host';
 
-    if (target === 'player') {
-      r.health[victimRole] = Math.max(0, r.health[victimRole] - 10);
-    } else if (target === 'box') {
-      if (r.boxHealth[victimRole] > 0) {
-        r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
-        r.health[attackerRole] = Math.min(400, r.health[attackerRole] + 5);
-      }
+    if (target === 'player') r.health[victimRole] = Math.max(0, r.health[victimRole] - 10);
+    else if (target === 'box') {
+      r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
+      r.health[attacker] = Math.min(400, r.health[attacker] + 5);
+    } else if (target === 'shield') {
+      r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 8);
     }
     io.in(roomId).emit('update_game_state', r);
   });
 
   socket.on('disconnect', () => {
-    for (const rid in rooms) {
-      if (rooms[rid].host === socket.id || rooms[rid].guest === socket.id) delete rooms[rid];
-    }
+    for (const rid in rooms) if (rooms[rid].host === socket.id || rooms[rid].guest === socket.id) delete rooms[rid];
   });
 });
 
