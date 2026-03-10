@@ -19,7 +19,8 @@ io.on('connection', (socket) => {
         guest: null, 
         health: { host: 400, guest: 400 }, 
         boxHealth: { host: 200, guest: 200 },
-        shieldHealth: { host: 150, guest: 150 }
+        shieldHealth: { host: 150, guest: 150 },
+        gameEnded: false
       };
       socket.emit('assign_role', { role: 'host' });
     } else {
@@ -35,22 +36,26 @@ io.on('connection', (socket) => {
   
   socket.on('take_damage', ({ roomId, target, victimRole, amount = 5 }) => {
     const r = rooms[roomId];
-    if (!r) return;
+    if (!r || r.gameEnded) return;
     
     const attacker = victimRole === 'host' ? 'guest' : 'host';
     let targetHit = null;
 
-    // Use the dynamic 'amount' (default 5 for bullets, up to 70 for grenades)
     if (target === 'player') {
       r.health[victimRole] = Math.max(0, r.health[victimRole] - amount);
     } else if (target === 'box') {
       targetHit = 'box';
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
-      // Lifesteal: Attacker heals half the damage dealt to a box, capped at 400 total HP
-      const healAmount = Math.floor(amount / 2);
-      r.health[attacker] = Math.min(400, r.health[attacker] + healAmount);
+      // Lifesteal capped at 400 HP
+      const healAmt = Math.floor(amount / 2);
+      r.health[attacker] = Math.min(400, r.health[attacker] + healAmt);
     } else if (target === 'shield') {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
+    }
+
+    // Check for Win/Loss Condition
+    if (r.health.host <= 0 || r.health.guest <= 0) {
+      r.gameEnded = true;
     }
     
     io.in(roomId).emit('update_game_state', { ...r, targetHit, attacker });
