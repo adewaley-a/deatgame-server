@@ -46,14 +46,12 @@ io.on('connection', (socket) => {
     } else if (target === 'box') {
       targetHit = 'box';
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
-      // Lifesteal capped at 400 HP
       const healAmt = Math.floor(amount / 2);
       r.health[attacker] = Math.min(400, r.health[attacker] + healAmt);
     } else if (target === 'shield') {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     }
 
-    // Check for Win/Loss Condition
     if (r.health.host <= 0 || r.health.guest <= 0) {
       r.gameEnded = true;
     }
@@ -71,4 +69,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT);
