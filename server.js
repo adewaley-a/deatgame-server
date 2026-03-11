@@ -17,8 +17,6 @@ io.on('connection', (socket) => {
       rooms[roomId] = { 
         host: socket.id, guest: null, 
         health: { host: 400, guest: 400 }, 
-        bonusHp: { host: 0, guest: 0 },
-        grenades: { host: 2, guest: 2 },
         boxHealth: { host: 200, guest: 200 },
         shieldHealth: { host: 150, guest: 150 }
       };
@@ -30,35 +28,26 @@ io.on('connection', (socket) => {
     io.in(roomId).emit('update_game_state', rooms[roomId]);
   });
 
-  socket.on('launch_grenade', (d) => {
-    const r = rooms[d.roomId];
-    if (!r) return;
-    const role = r.host === socket.id ? 'host' : 'guest';
-    if(r.grenades[role] > 0) {
-      r.grenades[role]--;
-      socket.to(d.roomId).emit('incoming_grenade', d);
-      io.in(d.roomId).emit('update_game_state', r);
-    }
-  });
-
+  socket.on('move', (d) => socket.to(d.roomId).emit('opp_move', d));
+  socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
+  
   socket.on('take_damage', ({ roomId, target, victimRole }) => {
     const r = rooms[roomId];
     if (!r) return;
     const attacker = victimRole === 'host' ? 'guest' : 'host';
+    let targetHit = null;
 
     if (target === 'player') {
-      // Bonus HP takes damage first
-      if (r.bonusHp[victimRole] > 0) r.bonusHp[victimRole] = Math.max(0, r.bonusHp[victimRole] - 5);
-      else r.health[victimRole] = Math.max(0, r.health[victimRole] - 5);
+      r.health[victimRole] = Math.max(0, r.health[victimRole] - 5);
     } else if (target === 'box') {
+      targetHit = 'box';
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
-      // Lifesteal Over-heal Logic
-      if (r.health[attacker] >= 400) r.bonusHp[attacker] = Math.min(100, r.bonusHp[attacker] + 5);
-      else r.health[attacker] = Math.min(400, r.health[attacker] + 5);
+      r.health[attacker] = Math.min(400, r.health[attacker] + 5);
     } else if (target === 'shield') {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
     }
-    io.in(roomId).emit('update_game_state', r);
+    
+    io.in(roomId).emit('update_game_state', { ...r, targetHit, attacker });
   });
 
   socket.on('disconnect', () => {
