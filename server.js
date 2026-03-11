@@ -30,16 +30,15 @@ io.on('connection', (socket) => {
     io.in(roomId).emit('update_game_state', rooms[roomId]);
   });
 
-  socket.on('launch_grenade', (d) => {
-    rooms[d.roomId].grenades[d.role]--;
-    socket.to(d.roomId).emit('incoming_grenade', d);
-  });
+  socket.on('move', (d) => socket.to(d.roomId).emit('opp_move', d));
+  socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
 
-  socket.on('grenade_explode', ({ roomId, x, y }) => {
-    const r = rooms[roomId];
-    if (!r) return;
-    // Simple radial damage check (can be expanded with positions)
-    io.in(roomId).emit('update_game_state', r);
+  socket.on('launch_grenade', (d) => {
+    if (rooms[d.roomId]) {
+      rooms[d.roomId].grenades[d.role]--;
+      socket.to(d.roomId).emit('incoming_grenade', d);
+      io.in(d.roomId).emit('update_game_state', rooms[d.roomId]);
+    }
   });
 
   socket.on('take_damage', ({ roomId, target, victimRole }) => {
@@ -48,14 +47,20 @@ io.on('connection', (socket) => {
     const attacker = victimRole === 'host' ? 'guest' : 'host';
 
     if (target === 'player') {
-      if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] -= 5;
+      if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - 10);
       else r.health[victimRole] = Math.max(0, r.health[victimRole] - 5);
     } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
-      if (r.health[attacker] < 400) r.health[attacker] += 5;
+      if (r.health[attacker] < 400) r.health[attacker] = Math.min(400, r.health[attacker] + 5);
       else r.overHealth[attacker] = Math.min(200, r.overHealth[attacker] + 5);
     }
     io.in(roomId).emit('update_game_state', r);
+  });
+
+  socket.on('disconnect', () => {
+    for (const rid in rooms) {
+      if (rooms[rid].host === socket.id || rooms[rid].guest === socket.id) delete rooms[rid];
+    }
   });
 });
 
