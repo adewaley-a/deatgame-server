@@ -1,10 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors');
-
 const app = express();
-app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "https://deatwin.netlify.app" } });
 
@@ -16,49 +13,35 @@ io.on('connection', (socket) => {
     if (!rooms[roomId]) {
       rooms[roomId] = { 
         host: socket.id, guest: null, 
-        health: { host: 400, guest: 400 }, 
-        overHealth: { host: 0, guest: 0 },
-        grenades: { host: 2, guest: 2 }
+        health: { [socket.id]: 400 },
+        entities: { [socket.id]: { boxHp: 200, shieldHp: 200 } }
       };
     } else {
       rooms[roomId].guest = socket.id;
+      rooms[roomId].health[socket.id] = 400;
+      rooms[roomId].entities[socket.id] = { boxHp: 200, shieldHp: 200 };
       io.in(roomId).emit('start_countdown');
     }
     socket.emit('assign_role', { role: socket.id === rooms[roomId].host ? 'host' : 'guest' });
   });
 
-  socket.on('move', (d) => socket.to(d.roomId).emit('opp_move', { x: d.x, y: d.y, rot: d.rot }));
-  socket.on('sync_box', (d) => socket.to(d.roomId).emit('box_move', { x: d.x, y: d.y }));
-  socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
+  socket.on('client_movement', (data) => {
+    socket.to(data.roomId).emit('sync_all', data);
+  });
 
-  socket.on('take_damage', ({ roomId, target, victimRole }) => {
+  socket.on('damage_entity', ({ roomId, type, targetId }) => {
     const r = rooms[roomId];
     if (!r) return;
-    const attackerRole = victimRole === 'host' ? 'guest' : 'host';
+    const victimId = targetId === 'opponent' ? (socket.id === r.host ? r.guest : r.host) : socket.id;
+    
+    if (type === 'player') r.health[victimId] -= 5;
+    else if (type === 'box') r.entities[victimId].boxHp -= 5;
+    else if (type === 'shield') r.entities[victimId].shieldHp -= 5;
 
-    if (target === 'player') {
-      if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] -= 10;
-      else r.health[victimRole] = Math.max(0, r.health[victimRole] - 10);
-    } else if (target === 'box') {
-      if (r.health[attackerRole] < 400) r.health[attackerRole] += 5;
-      else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
-    }
     io.in(roomId).emit('update_game_state', r);
   });
 
-  socket.on('toss_grenade', ({ roomId, x, y }) => {
-    const r = rooms[roomId];
-    if (!r) return;
-    const role = socket.id === r.host ? 'host' : 'guest';
-    const victimRole = role === 'host' ? 'guest' : 'host';
-    if (r.grenades[role] > 0) {
-      r.grenades[role] -= 1;
-      r.health[victimRole] = Math.max(0, r.health[victimRole] - 50);
-      io.in(roomId).emit('update_game_state', r);
-    }
-  });
-
-  socket.on('disconnect', () => { /* Logic to clear rooms */ });
+  socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
 });
 
-server.listen(process.env.PORT || 3001);
+server.listen(3001);
