@@ -22,13 +22,13 @@ io.on('connection', (socket) => {
       };
     } else {
       rooms[roomId].guest = socket.id;
-      // Trigger simultaneous countdown
       io.in(roomId).emit('start_countdown');
     }
     socket.emit('assign_role', { role: socket.id === rooms[roomId].host ? 'host' : 'guest' });
   });
 
-  socket.on('move', (d) => socket.to(d.roomId).emit('opp_move', d));
+  socket.on('move', (d) => socket.to(d.roomId).emit('opp_move', { x: d.x, y: d.y, rot: d.rot }));
+  socket.on('sync_box', (d) => socket.to(d.roomId).emit('box_move', { x: d.x, y: d.y }));
   socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
 
   socket.on('take_damage', ({ roomId, target, victimRole }) => {
@@ -40,14 +40,25 @@ io.on('connection', (socket) => {
       if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] -= 10;
       else r.health[victimRole] = Math.max(0, r.health[victimRole] - 10);
     } else if (target === 'box') {
-      // Heal Logic
       if (r.health[attackerRole] < 400) r.health[attackerRole] += 5;
       else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
     }
-    io.in(roomId).emit('update_game_state', { ...r, attacker: socket.id, targetHit: target });
+    io.in(roomId).emit('update_game_state', r);
   });
 
-  socket.on('disconnect', () => { /* Room Cleanup */ });
+  socket.on('toss_grenade', ({ roomId, x, y }) => {
+    const r = rooms[roomId];
+    if (!r) return;
+    const role = socket.id === r.host ? 'host' : 'guest';
+    const victimRole = role === 'host' ? 'guest' : 'host';
+    if (r.grenades[role] > 0) {
+      r.grenades[role] -= 1;
+      r.health[victimRole] = Math.max(0, r.health[victimRole] - 50);
+      io.in(roomId).emit('update_game_state', r);
+    }
+  });
+
+  socket.on('disconnect', () => { /* Logic to clear rooms */ });
 });
 
 server.listen(process.env.PORT || 3001);
