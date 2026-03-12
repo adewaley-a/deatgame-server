@@ -22,6 +22,7 @@ io.on('connection', (socket) => {
       };
     } else {
       rooms[roomId].guest = socket.id;
+      // Trigger simultaneous countdown
       io.in(roomId).emit('start_countdown');
     }
     socket.emit('assign_role', { role: socket.id === rooms[roomId].host ? 'host' : 'guest' });
@@ -29,27 +30,24 @@ io.on('connection', (socket) => {
 
   socket.on('move', (d) => socket.to(d.roomId).emit('opp_move', d));
   socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
-  socket.on('launch_grenade', (d) => {
-    rooms[d.roomId].grenades[d.role]--;
-    socket.to(d.roomId).emit('incoming_grenade', d);
-  });
 
-  socket.on('take_damage', ({ roomId, target, victimRole, amount }) => {
+  socket.on('take_damage', ({ roomId, target, victimRole }) => {
     const r = rooms[roomId];
     if (!r) return;
     const attackerRole = victimRole === 'host' ? 'guest' : 'host';
 
     if (target === 'player') {
-      const dmg = amount || 10;
-      if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - dmg);
-      else r.health[victimRole] = Math.max(0, r.health[victimRole] - dmg);
+      if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] -= 10;
+      else r.health[victimRole] = Math.max(0, r.health[victimRole] - 10);
     } else if (target === 'box') {
-      // BUILD SHIELD IF HP FULL
-      if (r.health[attackerRole] < 400) r.health[attackerRole] = Math.min(400, r.health[attackerRole] + 5);
+      // Heal Logic
+      if (r.health[attackerRole] < 400) r.health[attackerRole] += 5;
       else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
     }
-    io.in(roomId).emit('update_game_state', r);
+    io.in(roomId).emit('update_game_state', { ...r, attacker: socket.id, targetHit: target });
   });
+
+  socket.on('disconnect', () => { /* Room Cleanup */ });
 });
 
 server.listen(process.env.PORT || 3001);
