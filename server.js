@@ -42,7 +42,7 @@ io.on('connection', (socket) => {
         r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
     } else if (target === 'box') {
         r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
-        // Lifesteal
+        // Lifesteal mechanism
         if (r.health[attackerRole] < 400) r.health[attackerRole] = Math.min(400, r.health[attackerRole] + 5);
         else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
     }
