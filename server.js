@@ -36,12 +36,15 @@ io.on('connection', (socket) => {
     if (!r) return;
     const attackerRole = victimRole === 'host' ? 'guest' : 'host';
 
-    if (target === 'shield') {
-      r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 10);
+    if (target === 'player') {
+        r.health[victimRole] = Math.max(0, r.health[victimRole] - 5);
+    } else if (target === 'shield') {
+        r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
     } else if (target === 'box') {
-      r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 10);
-      if (r.health[attackerRole] < 400) r.health[attackerRole] = Math.min(400, r.health[attackerRole] + 5);
-      else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
+        r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
+        // Lifesteal
+        if (r.health[attackerRole] < 400) r.health[attackerRole] = Math.min(400, r.health[attackerRole] + 5);
+        else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
     }
     io.in(roomId).emit('update_game_state', { ...r, attacker: socket.id, targetHit: target });
   });
