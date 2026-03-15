@@ -21,7 +21,7 @@ io.on('connection', (socket) => {
         boxHealth: { host: 200, guest: 200 },
         shieldHealth: { host: 200, guest: 200 },
         grenades: { host: 2, guest: 2 },
-        positions: { host: {}, guest: {} }
+        positions: { host: {shooter:{x:0,y:0},shield:{x:0,y:0},box:{x:0,y:0}}, guest: {shooter:{x:0,y:0},shield:{x:0,y:0},box:{x:0,y:0}} }
       };
     } else {
       rooms[roomId].guest = socket.id;
@@ -31,12 +31,13 @@ io.on('connection', (socket) => {
   });
 
   socket.on('move_all', (d) => {
-    if (rooms[d.roomId]) rooms[d.roomId].positions[socket.id === rooms[d.roomId].host ? 'host' : 'guest'] = d;
+    const r = rooms[d.roomId];
+    if (r) r.positions[socket.id === r.host ? 'host' : 'guest'] = d;
     socket.to(d.roomId).emit('opp_move_all', d);
   });
 
   socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
-  
+
   socket.on('launch_grenade', (d) => {
     const r = rooms[d.roomId];
     if (!r) return;
@@ -51,26 +52,27 @@ io.on('connection', (socket) => {
     if (!r) return;
     const victimRole = socket.id === r.host ? 'guest' : 'host';
     const oppPos = r.positions[victimRole];
-    if (!oppPos) return;
-
-    const targets = [
+    
+    const elements = [
         { key: 'health', pos: oppPos.shooter },
         { key: 'shieldHealth', pos: oppPos.shield },
         { key: 'boxHealth', pos: oppPos.box }
     ];
 
-    targets.forEach(t => {
-        const dist = Math.hypot(x - t.pos.x, y - t.pos.y);
+    elements.forEach(el => {
+        const dist = Math.hypot(x - el.pos.x, y - el.pos.y);
         if (dist < 120) {
-            const dmg = Math.floor(70 * (1 - dist/120));
-            if (t.key === 'health') {
+            const damage = Math.floor(70 * (1 - dist/120));
+            if (el.key === 'health') {
                 if (r.overHealth[victimRole] > 0) {
-                    const diff = r.overHealth[victimRole] - dmg;
-                    if (diff < 0) { r.overHealth[victimRole] = 0; r.health[victimRole] += diff; }
-                    else r.overHealth[victimRole] = diff;
-                } else r.health[victimRole] -= dmg;
+                    r.overHealth[victimRole] -= damage;
+                    if (r.overHealth[victimRole] < 0) {
+                        r.health[victimRole] += r.overHealth[victimRole];
+                        r.overHealth[victimRole] = 0;
+                    }
+                } else r.health[victimRole] = Math.max(0, r.health[victimRole] - damage);
             } else {
-                r[t.key][victimRole] = Math.max(0, r[t.key][victimRole] - dmg);
+                r[el.key][victimRole] = Math.max(0, r[el.key][victimRole] - damage);
             }
         }
     });
@@ -78,13 +80,16 @@ io.on('connection', (socket) => {
   });
 
   socket.on('take_damage', ({ roomId, target, victimRole }) => {
-    const r = rooms[roomId]; if (!r) return;
+    const r = rooms[roomId];
+    if (!r) return;
     const attackerRole = victimRole === 'host' ? 'guest' : 'host';
+
     if (target === 'player') {
         if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - 5);
         else r.health[victimRole] = Math.max(0, r.health[victimRole] - 5);
-    } else if (target === 'shield') r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
-    else if (target === 'box') {
+    } else if (target === 'shield') {
+        r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
+    } else if (target === 'box') {
         r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
         if (r.health[attackerRole] < 400) r.health[attackerRole] = Math.min(400, r.health[attackerRole] + 5);
         else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
