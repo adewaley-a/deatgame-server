@@ -1,107 +1,55 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const cors = require('cors');
 
 const app = express();
+app.use(cors());
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "https://deatwin.netlify.app" } // Ensure this matches your Netlify URL in production
-});
+const io = new Server(server, { cors: { origin: "https://deatwin.netlify.app" } });
 
 const rooms = {};
 
 io.on('connection', (socket) => {
-  console.log('User Connected:', socket.id);
-
   socket.on('join_game', ({ roomId }) => {
     socket.join(roomId);
-
     if (!rooms[roomId]) {
-      rooms[roomId] = {
-        host: socket.id,
-        guest: null,
-        health: { [socket.id]: 400 },
-        overHealth: { [socket.id]: 0 },
-        grenades: { [socket.id]: 2 },
-        entities: {
-          [socket.id]: { boxHp: 200, shieldHp: 200 }
-        }
+      rooms[roomId] = { 
+        host: socket.id, guest: null, 
+        health: { host: 400, guest: 400 }, 
+        overHealth: { host: 0, guest: 0 },
+        grenades: { host: 2, guest: 2 }
       };
-    } else if (!rooms[roomId].guest) {
+    } else {
       rooms[roomId].guest = socket.id;
-      rooms[roomId].health[socket.id] = 400;
-      rooms[roomId].overHealth[socket.id] = 0;
-      rooms[roomId].grenades[socket.id] = 2;
-      rooms[roomId].entities[socket.id] = { boxHp: 200, shieldHp: 200 };
-      
       io.in(roomId).emit('start_countdown');
     }
-    
-    // Send initial state to let frontend know roles
-    io.in(roomId).emit('update_game_state', rooms[roomId]);
+    socket.emit('assign_role', { role: socket.id === rooms[roomId].host ? 'host' : 'guest' });
   });
 
-  // Authoritative Movement Sync
-  socket.on('client_movement', (data) => {
-    socket.to(data.roomId).emit('sync_all', data);
+  socket.on('move', (d) => socket.to(d.roomId).emit('opp_move', d));
+  socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
+  socket.on('launch_grenade', (d) => {
+    rooms[d.roomId].grenades[d.role]--;
+    socket.to(d.roomId).emit('incoming_grenade', d);
   });
 
-  // Authoritative Damage & Lifesteal Logic
-  socket.on('damage_entity', ({ roomId, type, targetId }) => {
+  socket.on('take_damage', ({ roomId, target, victimRole, amount }) => {
     const r = rooms[roomId];
     if (!r) return;
+    const attackerRole = victimRole === 'host' ? 'guest' : 'host';
 
-    const attackerId = socket.id;
-    const victimId = targetId === 'opponent' ? (attackerId === r.host ? r.guest : r.host) : attackerId;
-
-    if (!victimId) return;
-
-    if (type === 'player') {
-      // Damage overHealth first, then regular health
-      if (r.overHealth[victimId] > 0) {
-        r.overHealth[victimId] -= 5;
-      } else {
-        r.health[victimId] -= 5;
-      }
-    } 
-    else if (type === 'shield') {
-      r.entities[victimId].shieldHp -= 5;
-    } 
-    else if (type === 'box') {
-      r.entities[victimId].boxHp -= 5;
-      // LIFESTEAL LOGIC
-      if (r.health[attackerId] < 400) {
-        r.health[attackerId] = Math.min(400, r.health[attackerId] + 5);
-      } else {
-        r.overHealth[attackerId] = Math.min(200, r.overHealth[attackerId] + 5);
-      }
+    if (target === 'player') {
+      const dmg = amount || 10;
+      if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - dmg);
+      else r.health[victimRole] = Math.max(0, r.health[victimRole] - dmg);
+    } else if (target === 'box') {
+      // BUILD SHIELD IF HP FULL
+      if (r.health[attackerRole] < 400) r.health[attackerRole] = Math.min(400, r.health[attackerRole] + 5);
+      else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
     }
-
     io.in(roomId).emit('update_game_state', r);
-  });
-
-  // Grenade Inventory Logic
-  socket.on('launch_grenade', (data) => {
-    const r = rooms[data.roomId];
-    if (r && r.grenades[socket.id] > 0) {
-      r.grenades[socket.id] -= 1;
-      socket.to(data.roomId).emit('incoming_grenade', data);
-      io.in(data.roomId).emit('update_game_state', r);
-    }
-  });
-
-  socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
-
-  socket.on('disconnect', () => {
-    // Cleanup empty rooms
-    for (const roomId in rooms) {
-      if (rooms[roomId].host === socket.id || rooms[roomId].guest === socket.id) {
-        delete rooms[roomId];
-        console.log(`Room ${roomId} closed due to disconnect`);
-      }
-    }
   });
 });
 
-const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`Deatwin Server running on port ${PORT}`));
+server.listen(process.env.PORT || 3001);
