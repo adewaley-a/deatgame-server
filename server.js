@@ -35,16 +35,29 @@ io.on('connection', (socket) => {
     const r = rooms[roomId];
     if (!r) return;
     const attackerRole = victimRole === 'host' ? 'guest' : 'host';
+    const DMG = 5;
 
-    if (target === 'player') {
-        r.health[victimRole] = Math.max(0, r.health[victimRole] - 5);
-    } else if (target === 'shield') {
-        r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
+    if (target === 'player' || target === 'shield') {
+        const key = target === 'player' ? 'health' : 'shieldHealth';
+        
+        // Logic for Player: Overhealth is consumed first
+        if (target === 'player') {
+            if (r.overHealth[victimRole] > 0) {
+                r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - DMG);
+            } else {
+                r.health[victimRole] = Math.max(0, r.health[victimRole] - DMG);
+            }
+        } else {
+            r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - DMG);
+        }
     } else if (target === 'box') {
-        r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
-        // Lifesteal mechanism
-        if (r.health[attackerRole] < 400) r.health[attackerRole] = Math.min(400, r.health[attackerRole] + 5);
-        else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
+        r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - DMG);
+        // Lifesteal fills HP first, then overflows into Overhealth
+        if (r.health[attackerRole] < 400) {
+            r.health[attackerRole] = Math.min(400, r.health[attackerRole] + 5);
+        } else {
+            r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
+        }
     }
     io.in(roomId).emit('update_game_state', { ...r, attacker: socket.id, targetHit: target });
   });
