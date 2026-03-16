@@ -10,6 +10,22 @@ const io = new Server(server, { cors: { origin: "https://deatwin.netlify.app" } 
 
 const rooms = {};
 
+// Shield Replenishment Logic
+setInterval(() => {
+  for (const rid in rooms) {
+    const r = rooms[rid];
+    if (!r.gameStarted) continue;
+    const now = Date.now();
+    ['host', 'guest'].forEach(role => {
+      if (now - r.lastHit[role] > 5000 && r.shieldHealth[role] < 350 && r.shieldHealth[role] > 0) {
+        r.shieldHealth[role] = Math.min(350, r.shieldHealth[role] + 5);
+      }
+    });
+    // Optional: Broadcast replenishment every second
+    io.in(rid).emit('update_game_state', { ...r, hostId: r.host, guestId: r.guest });
+  }
+}, 1000);
+
 io.on('connection', (socket) => {
   socket.on('join_game', ({ roomId }) => {
     socket.join(roomId);
@@ -21,7 +37,8 @@ io.on('connection', (socket) => {
         boxHealth: { host: 300, guest: 300 },
         shieldHealth: { host: 350, guest: 350 },
         grenades: { host: 2, guest: 2 },
-        positions: { host: { shooter: {x:0, y:0}, shield: {x:0, y:0}, box: {x:0, y:0} }, guest: { shooter: {x:0, y:0}, shield: {x:0, y:0}, box: {x:0, y:0} } }
+        lastHit: { host: 0, guest: 0 },
+        positions: { host: {}, guest: {} }
       };
     } else if (!rooms[roomId].guest) {
       rooms[roomId].guest = socket.id;
@@ -34,54 +51,18 @@ io.on('connection', (socket) => {
   socket.on('move_all', (d) => {
     const r = rooms[d.roomId];
     if (r) {
-      const role = socket.id === r.host ? 'host' : 'guest';
-      r.positions[role] = d;
+      r.positions[socket.id === r.host ? 'host' : 'guest'] = d;
       socket.to(d.roomId).emit('opp_move_all', d);
     }
-  });
-
-  socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
-
-  socket.on('launch_grenade', (d) => {
-    const r = rooms[d.roomId];
-    if (r) {
-      const role = socket.id === r.host ? 'host' : 'guest';
-      r.grenades[role] = Math.max(0, r.grenades[role] - 1);
-      socket.to(d.roomId).emit('incoming_grenade', d);
-      io.in(d.roomId).emit('update_game_state', { ...r, hostId: r.host, guestId: r.guest });
-    }
-  });
-
-  socket.on('grenade_burst', ({ roomId, x, y }) => {
-    const r = rooms[roomId];
-    if (!r || !r.gameStarted) return;
-    
-    ['host', 'guest'].forEach(target => {
-      const pos = r.positions[target];
-      if (!pos) return;
-      
-      const distBox = Math.hypot(x - pos.box.x, y - pos.box.y);
-      if (distBox < 100) {
-        r.boxHealth[target] = Math.max(0, r.boxHealth[target] - 40);
-      }
-      const distShield = Math.hypot(x - pos.shield.x, y - pos.shield.y);
-      if (distShield < 100) {
-        r.shieldHealth[target] = Math.max(0, r.shieldHealth[target] - 50);
-      }
-      const distShooter = Math.hypot(x - pos.shooter.x, y - pos.shooter.y);
-      if (distShooter < 100) {
-        if (r.overHealth[target] > 0) r.overHealth[target] = Math.max(0, r.overHealth[target] - 30);
-        else r.health[target] = Math.max(0, r.health[target] - 30);
-      }
-    });
-    io.in(roomId).emit('update_game_state', { ...r, hostId: r.host, guestId: r.guest });
   });
 
   socket.on('take_damage', ({ roomId, target, victimRole }) => {
     const r = rooms[roomId];
     if (!r || !r.gameStarted) return;
     
+    r.lastHit[victimRole] = Date.now(); // Reset shield regen timer
     const attackerRole = victimRole === 'host' ? 'guest' : 'host';
+
     if (target === 'player') {
       if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - 5);
       else r.health[victimRole] = Math.max(0, r.health[victimRole] - 5);
@@ -97,6 +78,8 @@ io.on('connection', (socket) => {
       ...r, attackerRole, targetHit: target, hostId: r.host, guestId: r.guest 
     });
   });
+
+  socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
 
   socket.on('disconnect', () => {
     for (const rid in rooms) {
