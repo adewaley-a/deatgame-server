@@ -15,15 +15,13 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     if (!rooms[roomId]) {
       rooms[roomId] = { 
-        host: socket.id, 
-        guest: null, 
-        gameStarted: false,
+        host: socket.id, guest: null, gameStarted: false,
         health: { host: 650, guest: 650 }, 
         overHealth: { host: 0, guest: 0 },
         boxHealth: { host: 300, guest: 300 },
         shieldHealth: { host: 350, guest: 350 },
         grenades: { host: 2, guest: 2 },
-        positions: { host: {}, guest: {} }
+        positions: { host: { shooter: {x:0, y:0}, shield: {x:0, y:0}, box: {x:0, y:0} }, guest: { shooter: {x:0, y:0}, shield: {x:0, y:0}, box: {x:0, y:0} } }
       };
     } else if (!rooms[roomId].guest) {
       rooms[roomId].guest = socket.id;
@@ -43,6 +41,41 @@ io.on('connection', (socket) => {
   });
 
   socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
+
+  socket.on('launch_grenade', (d) => {
+    const r = rooms[d.roomId];
+    if (r) {
+      const role = socket.id === r.host ? 'host' : 'guest';
+      r.grenades[role] = Math.max(0, r.grenades[role] - 1);
+      socket.to(d.roomId).emit('incoming_grenade', d);
+      io.in(d.roomId).emit('update_game_state', { ...r, hostId: r.host, guestId: r.guest });
+    }
+  });
+
+  socket.on('grenade_burst', ({ roomId, x, y }) => {
+    const r = rooms[roomId];
+    if (!r || !r.gameStarted) return;
+    
+    ['host', 'guest'].forEach(target => {
+      const pos = r.positions[target];
+      if (!pos) return;
+      
+      const distBox = Math.hypot(x - pos.box.x, y - pos.box.y);
+      if (distBox < 100) {
+        r.boxHealth[target] = Math.max(0, r.boxHealth[target] - 40);
+      }
+      const distShield = Math.hypot(x - pos.shield.x, y - pos.shield.y);
+      if (distShield < 100) {
+        r.shieldHealth[target] = Math.max(0, r.shieldHealth[target] - 50);
+      }
+      const distShooter = Math.hypot(x - pos.shooter.x, y - pos.shooter.y);
+      if (distShooter < 100) {
+        if (r.overHealth[target] > 0) r.overHealth[target] = Math.max(0, r.overHealth[target] - 30);
+        else r.health[target] = Math.max(0, r.health[target] - 30);
+      }
+    });
+    io.in(roomId).emit('update_game_state', { ...r, hostId: r.host, guestId: r.guest });
+  });
 
   socket.on('take_damage', ({ roomId, target, victimRole }) => {
     const r = rooms[roomId];
