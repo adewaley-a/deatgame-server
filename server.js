@@ -6,10 +6,11 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "https://deatwin.netlify.app" } });
+const io = new Server(server, { cors: { origin: "https://deatwin.netlify.app/" } });
 
 const rooms = {};
 
+// Shield Replenishment Loop
 setInterval(() => {
   for (const rid in rooms) {
     const r = rooms[rid];
@@ -34,7 +35,7 @@ io.on('connection', (socket) => {
         overHealth: { host: 0, guest: 0 },
         boxHealth: { host: 300, guest: 300 },
         shieldHealth: { host: 350, guest: 350 },
-        grenades: { host: 2, guest: 2 },
+        grenades: { host: 2, guest: 2 }, // LIMIT SET TO 2
         lastHit: { host: 0, guest: 0 },
         positions: { host: {}, guest: {} }
       };
@@ -54,18 +55,29 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('take_damage', ({ roomId, target, victimRole }) => {
+  socket.on('throw_grenade', (d) => {
+    const r = rooms[d.roomId];
+    if (!r) return;
+    const role = socket.id === r.host ? 'host' : 'guest';
+    if(r.grenades[role] > 0) {
+        r.grenades[role]--;
+        socket.to(d.roomId).emit('incoming_grenade', d);
+    }
+  });
+
+  socket.on('take_damage', ({ roomId, target, victimRole, amount = 5 }) => {
     const r = rooms[roomId];
     if (!r || !r.gameStarted) return;
     r.lastHit[victimRole] = Date.now();
     const attackerRole = victimRole === 'host' ? 'guest' : 'host';
+    
     if (target === 'player') {
-      if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - 5);
-      else r.health[victimRole] = Math.max(0, r.health[victimRole] - 5);
+      if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - amount);
+      else r.health[victimRole] = Math.max(0, r.health[victimRole] - amount);
     } else if (target === 'shield') {
-      r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
+      r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     } else if (target === 'box') {
-      r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
+      r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
       if (r.health[attackerRole] < 650) r.health[attackerRole] = Math.min(650, r.health[attackerRole] + 5);
       else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
     }
