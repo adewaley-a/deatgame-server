@@ -22,26 +22,18 @@ io.on('connection', (socket) => {
       };
     } else if (!rooms[roomId].guest) {
       rooms[roomId].guest = socket.id;
-      setTimeout(() => { if(rooms[roomId]) rooms[roomId].gameStarted = true; }, 3000);
+      // Host side countdown start
       io.in(roomId).emit('start_countdown');
+      setTimeout(() => { 
+        if(rooms[roomId]) rooms[roomId].gameStarted = true; 
+      }, 3500);
     }
-    const role = socket.id === rooms[roomId].host ? 'host' : 'guest';
+    const role = (rooms[roomId] && rooms[roomId].host === socket.id) ? 'host' : 'guest';
     socket.emit('assign_role', { role });
   });
 
   socket.on('move_all', (d) => socket.to(d.roomId).emit('opp_move_all', d));
   socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
-
-  socket.on('throw_grenade', (d) => {
-    const r = rooms[d.roomId];
-    if (!r) return;
-    const role = socket.id === r.host ? 'host' : 'guest';
-    if(r.grenades[role] > 0) {
-        r.grenades[role]--;
-        socket.to(d.roomId).emit('incoming_grenade', d);
-        io.in(d.roomId).emit('update_game_state', { ...r });
-    }
-  });
 
   socket.on('take_damage', ({ roomId, target, victimRole, amount = 5 }) => {
     const r = rooms[roomId];
