@@ -15,20 +15,38 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     if (!rooms[roomId]) {
       rooms[roomId] = { 
-        host: socket.id, guest: null, 
-        health: { host: 400, guest: 400 }, 
+        host: socket.id, guest: null, gameStarted: false,
+        health: { host: 650, guest: 650 }, 
         overHealth: { host: 0, guest: 0 },
-        boxHealth: { host: 200, guest: 200 },
-        shieldHealth: { host: 200, guest: 200 },
+        boxHealth: { host: 300, guest: 300 },
+        shieldHealth: { host: 350, guest: 350 },
         grenades: { host: 2, guest: 2 },
+        lastHit: { host: 0, guest: 0 },
         positions: { host: {shooter:{x:0,y:0},shield:{x:0,y:0},box:{x:0,y:0}}, guest: {shooter:{x:0,y:0},shield:{x:0,y:0},box:{x:0,y:0}} }
       };
     } else {
       rooms[roomId].guest = socket.id;
+      setTimeout(() => { 
+        if(rooms[roomId]) rooms[roomId].gameStarted = true;
+      }, 3000); // 3s delay before damage starts
       io.in(roomId).emit('start_countdown');
     }
     socket.emit('assign_role', { role: socket.id === rooms[roomId].host ? 'host' : 'guest' });
   });
+
+  // Shield Regen Logic (Every second)
+  setInterval(() => {
+    Object.keys(rooms).forEach(id => {
+        const r = rooms[id];
+        const now = Date.now();
+        ['host', 'guest'].forEach(role => {
+            if (now - r.lastHit[role] > 5000 && r.shieldHealth[role] < 350 && r.shieldHealth[role] > 0) {
+                r.shieldHealth[role] = Math.min(350, r.shieldHealth[role] + 5);
+                io.in(id).emit('update_game_state', r);
+            }
+        });
+    });
+  }, 1000);
 
   socket.on('move_all', (d) => {
     const r = rooms[d.roomId];
@@ -49,40 +67,41 @@ io.on('connection', (socket) => {
 
   socket.on('grenade_burst', ({ roomId, x, y }) => {
     const r = rooms[roomId];
-    if (!r) return;
-    const victimRole = socket.id === r.host ? 'guest' : 'host';
-    const oppPos = r.positions[victimRole];
+    if (!r || !r.gameStarted) return;
     
-    const elements = [
-        { key: 'health', pos: oppPos.shooter },
-        { key: 'shieldHealth', pos: oppPos.shield },
-        { key: 'boxHealth', pos: oppPos.box }
-    ];
+    ['host', 'guest'].forEach(targetRole => {
+        const p = r.positions[targetRole];
+        const units = [
+            { key: 'health', pos: p.shooter, max: 650 },
+            { key: 'shieldHealth', pos: p.shield, max: 350 },
+            { key: 'boxHealth', pos: p.box, max: 300 }
+        ];
 
-    elements.forEach(el => {
-        const dist = Math.hypot(x - el.pos.x, y - el.pos.y);
-        if (dist < 120) {
-            const damage = Math.floor(70 * (1 - dist/120));
-            if (el.key === 'health') {
-                if (r.overHealth[victimRole] > 0) {
-                    r.overHealth[victimRole] -= damage;
-                    if (r.overHealth[victimRole] < 0) {
-                        r.health[victimRole] += r.overHealth[victimRole];
-                        r.overHealth[victimRole] = 0;
-                    }
-                } else r.health[victimRole] = Math.max(0, r.health[victimRole] - damage);
-            } else {
-                r[el.key][victimRole] = Math.max(0, r[el.key][victimRole] - damage);
+        units.forEach(u => {
+            const dist = Math.hypot(x - u.pos.x, y - u.pos.y);
+            if (dist < 130) {
+                const dmg = Math.floor(100 * (1 - dist/130));
+                r.lastHit[targetRole] = Date.now();
+                if (u.key === 'health') {
+                    if (r.overHealth[targetRole] > 0) {
+                        r.overHealth[targetRole] -= dmg;
+                        if (r.overHealth[targetRole] < 0) { 
+                            r.health[targetRole] += r.overHealth[targetRole]; 
+                            r.overHealth[targetRole] = 0; 
+                        }
+                    } else r.health[targetRole] = Math.max(0, r.health[targetRole] - dmg);
+                } else r[u.key][targetRole] = Math.max(0, r[u.key][targetRole] - dmg);
             }
-        }
+        });
     });
     io.in(roomId).emit('update_game_state', r);
   });
 
   socket.on('take_damage', ({ roomId, target, victimRole }) => {
     const r = rooms[roomId];
-    if (!r) return;
+    if (!r || !r.gameStarted) return;
     const attackerRole = victimRole === 'host' ? 'guest' : 'host';
+    r.lastHit[victimRole] = Date.now();
 
     if (target === 'player') {
         if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - 5);
@@ -91,10 +110,10 @@ io.on('connection', (socket) => {
         r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
     } else if (target === 'box') {
         r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
-        if (r.health[attackerRole] < 400) r.health[attackerRole] = Math.min(400, r.health[attackerRole] + 5);
+        if (r.health[attackerRole] < 650) r.health[attackerRole] = Math.min(650, r.health[attackerRole] + 5);
         else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
     }
-    io.in(roomId).emit('update_game_state', { ...r, attacker: socket.id, targetHit: target });
+    io.in(roomId).emit('update_game_state', { ...r, attackerRole, targetHit: target });
   });
 });
 
