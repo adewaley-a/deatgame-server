@@ -32,27 +32,16 @@ io.on('connection', (socket) => {
     socket.emit('assign_role', { role: socket.id === rooms[roomId].host ? 'host' : 'guest' });
   });
 
-  // Shield Auto-Regen (Check every second)
-  setInterval(() => {
-    Object.keys(rooms).forEach(id => {
-        const r = rooms[id];
-        const now = Date.now();
-        ['host', 'guest'].forEach(role => {
-            if (r.gameStarted && now - r.lastHit[role] > 5000 && r.shieldHealth[role] < 350 && r.shieldHealth[role] > 0) {
-                r.shieldHealth[role] = Math.min(350, r.shieldHealth[role] + 5);
-                io.in(id).emit('update_game_state', r);
-            }
-        });
-    });
-  }, 1000);
-
   socket.on('move_all', (d) => {
     const r = rooms[d.roomId];
     if (r) r.positions[socket.id === r.host ? 'host' : 'guest'] = d;
     socket.to(d.roomId).emit('opp_move_all', d);
   });
 
-  socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
+  socket.on('fire', (d) => {
+    // Send to opponent as a mirrored bullet
+    socket.to(d.roomId).emit('incoming_bullet', d);
+  });
 
   socket.on('launch_grenade', (d) => {
     const r = rooms[d.roomId];
@@ -69,7 +58,7 @@ io.on('connection', (socket) => {
     
     ['host', 'guest'].forEach(targetRole => {
         const p = r.positions[targetRole];
-        if(!p.shooter) return;
+        if(!p || !p.shooter) return;
         const units = [
             { key: 'health', pos: p.shooter },
             { key: 'shieldHealth', pos: p.shield },
@@ -84,7 +73,10 @@ io.on('connection', (socket) => {
                 if (u.key === 'health') {
                     if (r.overHealth[targetRole] > 0) {
                         r.overHealth[targetRole] -= dmg;
-                        if (r.overHealth[targetRole] < 0) { r.health[targetRole] += r.overHealth[targetRole]; r.overHealth[targetRole] = 0; }
+                        if (r.overHealth[targetRole] < 0) { 
+                          r.health[targetRole] += r.overHealth[targetRole]; 
+                          r.overHealth[targetRole] = 0; 
+                        }
                     } else r.health[targetRole] = Math.max(0, r.health[targetRole] - dmg);
                 } else r[u.key][targetRole] = Math.max(0, r[u.key][targetRole] - dmg);
             }
@@ -97,7 +89,6 @@ io.on('connection', (socket) => {
     const r = rooms[roomId];
     if (!r || !r.gameStarted) return;
     
-    // STRICT CHECK: Only process damage if it's the victimRole receiving it
     const attackerRole = victimRole === 'host' ? 'guest' : 'host';
     r.lastHit[victimRole] = Date.now();
 
@@ -108,12 +99,11 @@ io.on('connection', (socket) => {
         r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
     } else if (target === 'box') {
         r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
-        // Lifesteal logic
+        // Lifesteal
         if (r.health[attackerRole] < 650) r.health[attackerRole] = Math.min(650, r.health[attackerRole] + 5);
         else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
     }
 
-    // Broadcast the attackerRole so frontend can trigger animation for both players
     io.in(roomId).emit('update_game_state', { ...r, attackerRole, targetHit: target });
   });
 });
