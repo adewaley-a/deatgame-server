@@ -22,25 +22,23 @@ io.on('connection', (socket) => {
         shieldHealth: { host: 350, guest: 350 },
         grenades: { host: 2, guest: 2 },
         lastHit: { host: 0, guest: 0 },
-        positions: { host: {shooter:{x:0,y:0},shield:{x:0,y:0},box:{x:0,y:0}}, guest: {shooter:{x:0,y:0},shield:{x:0,y:0},box:{x:0,y:0}} }
+        positions: { host: {}, guest: {} }
       };
     } else {
       rooms[roomId].guest = socket.id;
-      setTimeout(() => { 
-        if(rooms[roomId]) rooms[roomId].gameStarted = true;
-      }, 3000); // 3s delay before damage starts
+      setTimeout(() => { if(rooms[roomId]) rooms[roomId].gameStarted = true; }, 3000);
       io.in(roomId).emit('start_countdown');
     }
     socket.emit('assign_role', { role: socket.id === rooms[roomId].host ? 'host' : 'guest' });
   });
 
-  // Shield Regen Logic (Every second)
+  // Shield Auto-Regen (Check every second)
   setInterval(() => {
     Object.keys(rooms).forEach(id => {
         const r = rooms[id];
         const now = Date.now();
         ['host', 'guest'].forEach(role => {
-            if (now - r.lastHit[role] > 5000 && r.shieldHealth[role] < 350 && r.shieldHealth[role] > 0) {
+            if (r.gameStarted && now - r.lastHit[role] > 5000 && r.shieldHealth[role] < 350 && r.shieldHealth[role] > 0) {
                 r.shieldHealth[role] = Math.min(350, r.shieldHealth[role] + 5);
                 io.in(id).emit('update_game_state', r);
             }
@@ -71,10 +69,11 @@ io.on('connection', (socket) => {
     
     ['host', 'guest'].forEach(targetRole => {
         const p = r.positions[targetRole];
+        if(!p.shooter) return;
         const units = [
-            { key: 'health', pos: p.shooter, max: 650 },
-            { key: 'shieldHealth', pos: p.shield, max: 350 },
-            { key: 'boxHealth', pos: p.box, max: 300 }
+            { key: 'health', pos: p.shooter },
+            { key: 'shieldHealth', pos: p.shield },
+            { key: 'boxHealth', pos: p.box }
         ];
 
         units.forEach(u => {
@@ -85,10 +84,7 @@ io.on('connection', (socket) => {
                 if (u.key === 'health') {
                     if (r.overHealth[targetRole] > 0) {
                         r.overHealth[targetRole] -= dmg;
-                        if (r.overHealth[targetRole] < 0) { 
-                            r.health[targetRole] += r.overHealth[targetRole]; 
-                            r.overHealth[targetRole] = 0; 
-                        }
+                        if (r.overHealth[targetRole] < 0) { r.health[targetRole] += r.overHealth[targetRole]; r.overHealth[targetRole] = 0; }
                     } else r.health[targetRole] = Math.max(0, r.health[targetRole] - dmg);
                 } else r[u.key][targetRole] = Math.max(0, r[u.key][targetRole] - dmg);
             }
@@ -100,6 +96,8 @@ io.on('connection', (socket) => {
   socket.on('take_damage', ({ roomId, target, victimRole }) => {
     const r = rooms[roomId];
     if (!r || !r.gameStarted) return;
+    
+    // STRICT CHECK: Only process damage if it's the victimRole receiving it
     const attackerRole = victimRole === 'host' ? 'guest' : 'host';
     r.lastHit[victimRole] = Date.now();
 
@@ -110,9 +108,12 @@ io.on('connection', (socket) => {
         r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - 5);
     } else if (target === 'box') {
         r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - 5);
+        // Lifesteal logic
         if (r.health[attackerRole] < 650) r.health[attackerRole] = Math.min(650, r.health[attackerRole] + 5);
         else r.overHealth[attackerRole] = Math.min(200, r.overHealth[attackerRole] + 5);
     }
+
+    // Broadcast the attackerRole so frontend can trigger animation for both players
     io.in(roomId).emit('update_game_state', { ...r, attackerRole, targetHit: target });
   });
 });
