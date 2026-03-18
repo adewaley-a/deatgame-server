@@ -31,7 +31,6 @@ io.on('connection', (socket) => {
     socket.emit('assign_role', { role: (rooms[roomId].host === socket.id ? 'host' : 'guest') });
   });
 
-  // High-frequency movement broadcast
   socket.on('move_all', (data) => {
     socket.to(data.roomId).emit('opp_move_all', data);
   });
@@ -40,13 +39,14 @@ io.on('connection', (socket) => {
     socket.to(data.roomId).emit('incoming_bullet', data);
   });
 
-  socket.on('take_damage', ({ roomId, target, victimRole, damageType, customDamage }) => {
+  socket.on('take_damage', ({ roomId, target, victimRole, damageType, customDamage, x, y }) => {
     const r = rooms[roomId];
     if (!r || !r.gameStarted) return;
 
     const attacker = victimRole === 'host' ? 'guest' : 'host';
-    const amount = damageType === 'grenade' ? customDamage : 5;
+    const amount = damageType === 'grenade' ? (customDamage || 40) : 5;
 
+    // Logic for Health/Shield/Box
     if (target === 'player') {
       if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - amount);
       else r.health[victimRole] = Math.max(0, r.health[victimRole] - amount);
@@ -54,12 +54,12 @@ io.on('connection', (socket) => {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
-      // Lifesteal
+      // Lifesteal logic
       if (r.health[attacker] < 650) r.health[attacker] = Math.min(650, r.health[attacker] + 5);
       else r.overHealth[attacker] = Math.min(200, r.overHealth[attacker] + 5);
     }
 
-    // BROADCAST UPDATED STATE (Fixes the "eliminated on one screen but not the other" bug)
+    // Broadcast the hit + location for explosions
     io.in(roomId).emit('update_game_state', { 
       health: r.health, 
       overHealth: r.overHealth, 
@@ -67,7 +67,10 @@ io.on('connection', (socket) => {
       shieldHealth: r.shieldHealth,
       attackerRole: attacker,
       victimRole: victimRole,
-      targetHit: target
+      targetHit: target,
+      damageType: damageType,
+      x: x, // For the frontend explosion circle
+      y: y
     });
   });
 
