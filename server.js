@@ -4,12 +4,9 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 
 const app = express();
-// Enable CORS for all routes
 app.use(cors());
 
 const server = http.createServer(app);
-
-// Improved CORS for Socket.io - allows both production and local dev
 const io = new Server(server, { 
   cors: { 
     origin: ["https://deatwin.netlify.app", "http://localhost:3000"], 
@@ -24,7 +21,6 @@ io.on('connection', (socket) => {
 
   socket.on('join_game', ({ roomId }) => {
     if (!roomId) return;
-    
     socket.join(roomId);
     
     if (!rooms[roomId]) {
@@ -40,14 +36,8 @@ io.on('connection', (socket) => {
       };
     } else if (!rooms[roomId].guest && rooms[roomId].host !== socket.id) {
       rooms[roomId].guest = socket.id;
-      // Small delay ensures both clients are ready to listen for the countdown
-      setTimeout(() => {
-        io.in(roomId).emit('start_countdown');
-      }, 500);
-      
-      setTimeout(() => { 
-        if (rooms[roomId]) rooms[roomId].gameStarted = true; 
-      }, 4000);
+      setTimeout(() => { io.in(roomId).emit('start_countdown'); }, 500);
+      setTimeout(() => { if (rooms[roomId]) rooms[roomId].gameStarted = true; }, 4000);
     }
     
     const role = (rooms[roomId] && rooms[roomId].host === socket.id) ? 'host' : 'guest';
@@ -58,14 +48,12 @@ io.on('connection', (socket) => {
   socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
   socket.on('throw_grenade', (d) => socket.to(d.roomId).emit('incoming_grenade', d));
 
-  // Enhanced Damage logic: Supports different damage amounts for bullets vs grenades
   socket.on('take_damage', ({ roomId, target, victimRole, damageType }) => {
     const r = rooms[roomId];
     if (!r || !r.gameStarted) return;
     
     const attackerRole = victimRole === 'host' ? 'guest' : 'host';
-    // Bullets = 5, Grenades = 25 (or adjust as needed)
-    const amount = damageType === 'grenade' ? 25 : 5; 
+    const amount = damageType === 'grenade' ? 30 : 5; 
 
     if (target === 'player') {
       if (r.overHealth[victimRole] > 0) {
@@ -78,7 +66,7 @@ io.on('connection', (socket) => {
     } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
       
-      // Lifesteal Logic
+      // Lifesteal Logic: +5 HP back to attacker
       if (r.health[attackerRole] < 650) {
         r.health[attackerRole] = Math.min(650, r.health[attackerRole] + 5);
       } else {
@@ -100,7 +88,6 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     for (const rid in rooms) {
       if (rooms[rid].host === socket.id || rooms[rid].guest === socket.id) {
-        // Notify the other player that the opponent left
         socket.to(rid).emit('opponent_left');
         delete rooms[rid];
         break;
@@ -110,6 +97,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
