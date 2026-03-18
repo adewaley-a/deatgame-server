@@ -17,33 +17,27 @@ io.on('connection', (socket) => {
 
     if (!rooms[roomId]) {
       rooms[roomId] = {
-        host: socket.id,
-        guest: null,
-        gameStarted: false,
+        host: socket.id, guest: null, gameStarted: false,
         health: { host: 650, guest: 650 },
         overHealth: { host: 0, guest: 0 },
         boxHealth: { host: 300, guest: 300 },
-        shieldHealth: { host: 350, guest: 350 },
-        grenades: { host: 2, guest: 2 }
+        shieldHealth: { host: 350, guest: 350 }
       };
     } else if (!rooms[roomId].guest && rooms[roomId].host !== socket.id) {
       rooms[roomId].guest = socket.id;
-      setTimeout(() => io.in(roomId).emit('start_countdown'), 500);
+      io.in(roomId).emit('start_countdown');
       setTimeout(() => { if (rooms[roomId]) rooms[roomId].gameStarted = true; }, 4000);
     }
     socket.emit('assign_role', { role: (rooms[roomId].host === socket.id ? 'host' : 'guest') });
   });
 
-  socket.on('move_all', (d) => socket.to(d.roomId).emit('opp_move_all', d));
-  socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
-  socket.on('throw_grenade', (d) => socket.to(d.roomId).emit('incoming_grenade', d));
+  // High-frequency movement broadcast
+  socket.on('move_all', (data) => {
+    socket.to(data.roomId).emit('opp_move_all', data);
+  });
 
-  socket.on('use_grenade', ({ roomId, role }) => {
-    const r = rooms[roomId];
-    if (r && r.grenades[role] > 0) {
-      r.grenades[role] -= 1;
-      io.in(roomId).emit('update_game_state', r);
-    }
+  socket.on('fire', (data) => {
+    socket.to(data.roomId).emit('incoming_bullet', data);
   });
 
   socket.on('take_damage', ({ roomId, target, victimRole, damageType, customDamage }) => {
@@ -53,32 +47,24 @@ io.on('connection', (socket) => {
     const attacker = victimRole === 'host' ? 'guest' : 'host';
     const amount = damageType === 'grenade' ? customDamage : 5;
 
-    // 1. Process Damage
     if (target === 'player') {
-      if (r.overHealth[victimRole] > 0) {
-        r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - amount);
-      } else {
-        r.health[victimRole] = Math.max(0, r.health[victimRole] - amount);
-      }
+      if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - amount);
+      else r.health[victimRole] = Math.max(0, r.health[victimRole] - amount);
     } else if (target === 'shield') {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
-      // Lifesteal logic: Attacker gets +5
-      if (r.health[attacker] < 650) {
-        r.health[attacker] = Math.min(650, r.health[attacker] + 5);
-      } else {
-        r.overHealth[attacker] = Math.min(200, r.overHealth[attacker] + 5);
-      }
+      // Lifesteal
+      if (r.health[attacker] < 650) r.health[attacker] = Math.min(650, r.health[attacker] + 5);
+      else r.overHealth[attacker] = Math.min(200, r.overHealth[attacker] + 5);
     }
 
-    // 2. BROADCAST UPDATED STATE TO EVERYONE (Fixes Desync)
+    // BROADCAST UPDATED STATE (Fixes the "eliminated on one screen but not the other" bug)
     io.in(roomId).emit('update_game_state', { 
       health: r.health, 
       overHealth: r.overHealth, 
       boxHealth: r.boxHealth, 
-      shieldHealth: r.shieldHealth, 
-      grenades: r.grenades,
+      shieldHealth: r.shieldHealth,
       attackerRole: attacker,
       victimRole: victimRole,
       targetHit: target
