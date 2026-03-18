@@ -28,7 +28,6 @@ io.on('connection', (socket) => {
       };
     } else if (!rooms[roomId].guest && rooms[roomId].host !== socket.id) {
       rooms[roomId].guest = socket.id;
-      // Countdown sync
       setTimeout(() => io.in(roomId).emit('start_countdown'), 500);
       setTimeout(() => { if (rooms[roomId]) rooms[roomId].gameStarted = true; }, 4000);
     }
@@ -43,11 +42,7 @@ io.on('connection', (socket) => {
     const r = rooms[roomId];
     if (r && r.grenades[role] > 0) {
       r.grenades[role] -= 1;
-      io.in(roomId).emit('update_game_state', { 
-        health: r.health, overHealth: r.overHealth, 
-        boxHealth: r.boxHealth, shieldHealth: r.shieldHealth, 
-        grenades: r.grenades 
-      });
+      io.in(roomId).emit('update_game_state', r);
     }
   });
 
@@ -58,6 +53,7 @@ io.on('connection', (socket) => {
     const attacker = victimRole === 'host' ? 'guest' : 'host';
     const amount = damageType === 'grenade' ? customDamage : 5;
 
+    // 1. Process Damage
     if (target === 'player') {
       if (r.overHealth[victimRole] > 0) {
         r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - amount);
@@ -68,7 +64,7 @@ io.on('connection', (socket) => {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
-      // Lifesteal Logic: +5HP per box hit
+      // Lifesteal logic: Attacker gets +5
       if (r.health[attacker] < 650) {
         r.health[attacker] = Math.min(650, r.health[attacker] + 5);
       } else {
@@ -76,10 +72,16 @@ io.on('connection', (socket) => {
       }
     }
 
+    // 2. BROADCAST UPDATED STATE TO EVERYONE (Fixes Desync)
     io.in(roomId).emit('update_game_state', { 
-      health: r.health, overHealth: r.overHealth, 
-      boxHealth: r.boxHealth, shieldHealth: r.shieldHealth, 
-      grenades: r.grenades, attackerRole: attacker, targetHit: target 
+      health: r.health, 
+      overHealth: r.overHealth, 
+      boxHealth: r.boxHealth, 
+      shieldHealth: r.shieldHealth, 
+      grenades: r.grenades,
+      attackerRole: attacker,
+      victimRole: victimRole,
+      targetHit: target
     });
   });
 
@@ -94,4 +96,4 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(process.env.PORT || 3001, () => console.log("Server Running"));
+server.listen(process.env.PORT || 3001);
