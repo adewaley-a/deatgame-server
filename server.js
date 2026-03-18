@@ -39,14 +39,13 @@ io.on('connection', (socket) => {
     socket.to(data.roomId).emit('incoming_bullet', data);
   });
 
-  socket.on('take_damage', ({ roomId, target, victimRole, damageType, customDamage, x, y }) => {
+  socket.on('take_damage', ({ roomId, target, victimRole, damageType, x, y }) => {
     const r = rooms[roomId];
     if (!r || !r.gameStarted) return;
 
     const attacker = victimRole === 'host' ? 'guest' : 'host';
-    const amount = damageType === 'grenade' ? (customDamage || 40) : 5;
+    const amount = damageType === 'grenade' ? 45 : 5;
 
-    // Logic for Health/Shield/Box
     if (target === 'player') {
       if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - amount);
       else r.health[victimRole] = Math.max(0, r.health[victimRole] - amount);
@@ -54,23 +53,16 @@ io.on('connection', (socket) => {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
-      // Lifesteal logic
+      // Lifesteal
       if (r.health[attacker] < 650) r.health[attacker] = Math.min(650, r.health[attacker] + 5);
       else r.overHealth[attacker] = Math.min(200, r.overHealth[attacker] + 5);
     }
 
-    // Broadcast the hit + location for explosions
     io.in(roomId).emit('update_game_state', { 
-      health: r.health, 
-      overHealth: r.overHealth, 
-      boxHealth: r.boxHealth, 
-      shieldHealth: r.shieldHealth,
-      attackerRole: attacker,
-      victimRole: victimRole,
-      targetHit: target,
-      damageType: damageType,
-      x: x, // For the frontend explosion circle
-      y: y
+      health: r.health, overHealth: r.overHealth, 
+      boxHealth: r.boxHealth, shieldHealth: r.shieldHealth,
+      attackerRole: attacker, victimRole, targetHit: target, 
+      damageType, hitX: x, hitY: y
     });
   });
 
