@@ -22,7 +22,6 @@ io.on('connection', (socket) => {
 
   socket.on('join_game', ({ roomId }) => {
     if (!roomId) return;
-    
     socket.join(roomId);
     
     if (!rooms[roomId]) {
@@ -72,8 +71,6 @@ io.on('connection', (socket) => {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
-      
-      // Lifesteal Logic
       if (r.health[attackerRole] < 650) {
         r.health[attackerRole] = Math.min(650, r.health[attackerRole] + 5);
       } else {
@@ -104,6 +101,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
