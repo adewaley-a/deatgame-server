@@ -5,13 +5,9 @@ const cors = require('cors');
 
 const app = express();
 app.use(cors());
-
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: ["https://deatwin.netlify.app", "http://localhost:3000"],
-    methods: ["GET", "POST"]
-  }
+  cors: { origin: ["https://deatwin.netlify.app", "http://localhost:3000"], methods: ["GET", "POST"] }
 });
 
 const rooms = {};
@@ -20,16 +16,11 @@ io.on('connection', (socket) => {
   socket.on('join_game', ({ roomId }) => {
     if (!roomId) return;
     socket.join(roomId);
-    
     if (!rooms[roomId]) {
       rooms[roomId] = {
-        host: socket.id,
-        guest: null,
-        gameStarted: false,
-        health: { host: 650, guest: 650 },
-        overHealth: { host: 0, guest: 0 }, // Max increased to 300 in logic
-        boxHealth: { host: 300, guest: 300 },
-        shieldHealth: { host: 350, guest: 350 },
+        host: socket.id, guest: null, gameStarted: false,
+        health: { host: 650, guest: 650 }, overHealth: { host: 0, guest: 0 },
+        boxHealth: { host: 300, guest: 300 }, shieldHealth: { host: 350, guest: 350 },
         grenades: { host: 2, guest: 2 }
       };
     } else if (!rooms[roomId].guest && rooms[roomId].host !== socket.id) {
@@ -43,14 +34,23 @@ io.on('connection', (socket) => {
 
   socket.on('move_all', (d) => socket.to(d.roomId).emit('opp_move_all', d));
   socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
-  socket.on('throw_grenade', (d) => socket.to(d.roomId).emit('incoming_grenade', d));
+  socket.on('throw_grenade', (d) => {
+    const r = rooms[d.roomId];
+    if (r) r.grenades[d.role === 'host' ? 'host' : 'guest']--;
+    socket.to(d.roomId).emit('incoming_grenade', d);
+  });
 
-  socket.on('take_damage', ({ roomId, target, victimRole, damageType }) => {
+  socket.on('take_damage', ({ roomId, target, victimRole, damageType, dist }) => {
     const r = rooms[roomId];
     if (!r || !r.gameStarted) return;
-    
     const attackerRole = victimRole === 'host' ? 'guest' : 'host';
-    const amount = damageType === 'grenade' ? 25 : 5;
+    
+    let amount = 5; 
+    if (damageType === 'grenade') {
+      const maxRange = 150;
+      const rawDamage = 70 * (1 - (dist / maxRange));
+      amount = Math.max(0, Math.floor(rawDamage));
+    }
 
     if (target === 'player') {
       if (r.overHealth[victimRole] > 0) {
@@ -62,7 +62,6 @@ io.on('connection', (socket) => {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
-      // Lifesteal Logic: Max Overhealth is now 300 (Total 950)
       if (r.health[attackerRole] < 650) {
         r.health[attackerRole] = Math.min(650, r.health[attackerRole] + 5);
       } else {
@@ -89,4 +88,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`Server running on ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
