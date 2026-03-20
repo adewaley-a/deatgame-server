@@ -72,7 +72,8 @@ io.on('connection', (socket) => {
     io.in(roomId).emit('update_game_state', {
       health: r.health, overHealth: r.overHealth,
       boxHealth: r.boxHealth, shieldHealth: r.shieldHealth,
-      grenades: r.grenades, attackerRole, targetHit: target
+      grenades: r.grenades, 
+      lastHit: { target, attackerRole } 
     });
   });
 
