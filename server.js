@@ -62,7 +62,6 @@ io.on('connection', (socket) => {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
-      // Lifesteal logic
       if (r.health[attackerRole] < 650) {
         r.health[attackerRole] = Math.min(650, r.health[attackerRole] + 5);
       } else {
