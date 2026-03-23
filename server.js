@@ -62,6 +62,7 @@ io.on('connection', (socket) => {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
+      // Lifesteal: Gain 5HP (capped at 650) or Overhealth (capped at 300)
       if (r.health[attackerRole] < 650) {
         r.health[attackerRole] = Math.min(650, r.health[attackerRole] + 5);
       } else {
@@ -81,8 +82,7 @@ io.on('connection', (socket) => {
     for (const rid in rooms) {
       if (rooms[rid].host === socket.id || rooms[rid].guest === socket.id) {
         socket.to(rid).emit('opponent_left');
-        delete rooms[rid];
-        break;
+        delete rooms[rid]; break;
       }
     }
   });
