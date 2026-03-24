@@ -11,16 +11,23 @@ const io = new Server(server, {
 });
 
 const rooms = {};
-const damageCooldowns = new Set(); 
+const damageCooldowns = new Set();
 
 io.on('connection', (socket) => {
   socket.on('join_game', ({ roomId }) => {
     if (!roomId) return;
+    
+    // Check if room is already "closed" (game finished)
+    if (rooms[roomId] && rooms[roomId].isClosed) {
+      socket.emit('error', 'Room is no longer active');
+      return;
+    }
+
     socket.join(roomId);
 
     if (!rooms[roomId]) {
       rooms[roomId] = {
-        host: socket.id, guest: null, gameStarted: false,
+        host: socket.id, guest: null, gameStarted: false, isClosed: false,
         health: { host: 650, guest: 650 }, overHealth: { host: 0, guest: 0 },
         boxHealth: { host: 300, guest: 300 }, shieldHealth: { host: 350, guest: 350 },
         grenades: { host: 2, guest: 2 }
@@ -37,15 +44,10 @@ io.on('connection', (socket) => {
 
   socket.on('move_all', (d) => socket.to(d.roomId).emit('opp_move_all', d));
   socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
-  
-  socket.on('throw_grenade', (d) => {
-    if (rooms[d.roomId]) rooms[d.roomId].grenades[d.role]--;
-    socket.to(d.roomId).emit('incoming_grenade', d);
-  });
 
   socket.on('take_damage', ({ roomId, target, victimRole, damageType, dist, bulletId }) => {
     const r = rooms[roomId];
-    if (!r || !r.gameStarted) return;
+    if (!r || !r.gameStarted || r.isClosed) return;
 
     const hitKey = `${roomId}-${bulletId || (damageType + Date.now())}`;
     if (damageCooldowns.has(hitKey)) return;
@@ -64,6 +66,11 @@ io.on('connection', (socket) => {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
       if (r.health[attackerRole] < 650) r.health[attackerRole] = Math.min(650, r.health[attackerRole] + 5);
       else r.overHealth[attackerRole] = Math.min(300, r.overHealth[attackerRole] + 5);
+    }
+
+    // Check for game end and close room
+    if (r.health.host <= 0 || r.health.guest <= 0) {
+      r.isClosed = true;
     }
 
     io.in(roomId).emit('update_game_state', { ...r, lastHit: { target, attackerRole } });
