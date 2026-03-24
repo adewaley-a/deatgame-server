@@ -11,11 +11,13 @@ const io = new Server(server, {
 });
 
 const rooms = {};
+const damageCooldowns = new Set(); 
 
 io.on('connection', (socket) => {
   socket.on('join_game', ({ roomId }) => {
     if (!roomId) return;
     socket.join(roomId);
+
     if (!rooms[roomId]) {
       rooms[roomId] = {
         host: socket.id, guest: null, gameStarted: false,
@@ -25,56 +27,46 @@ io.on('connection', (socket) => {
       };
     } else if (!rooms[roomId].guest && rooms[roomId].host !== socket.id) {
       rooms[roomId].guest = socket.id;
-      setTimeout(() => io.in(roomId).emit('start_countdown'), 500);
-      setTimeout(() => { if (rooms[roomId]) rooms[roomId].gameStarted = true; }, 4000);
+      io.in(roomId).emit('start_countdown');
+      setTimeout(() => { if (rooms[roomId]) rooms[roomId].gameStarted = true; }, 3500);
     }
+    
     const role = (rooms[roomId] && rooms[roomId].host === socket.id) ? 'host' : 'guest';
     socket.emit('assign_role', { role });
   });
 
   socket.on('move_all', (d) => socket.to(d.roomId).emit('opp_move_all', d));
   socket.on('fire', (d) => socket.to(d.roomId).emit('incoming_bullet', d));
+  
   socket.on('throw_grenade', (d) => {
-    const r = rooms[d.roomId];
-    if (r) r.grenades[d.role === 'host' ? 'host' : 'guest']--;
+    if (rooms[d.roomId]) rooms[d.roomId].grenades[d.role]--;
     socket.to(d.roomId).emit('incoming_grenade', d);
   });
 
-  socket.on('take_damage', ({ roomId, target, victimRole, damageType, dist }) => {
+  socket.on('take_damage', ({ roomId, target, victimRole, damageType, dist, bulletId }) => {
     const r = rooms[roomId];
     if (!r || !r.gameStarted) return;
+
+    const hitKey = `${roomId}-${bulletId || (damageType + Date.now())}`;
+    if (damageCooldowns.has(hitKey)) return;
+    damageCooldowns.add(hitKey);
+    setTimeout(() => damageCooldowns.delete(hitKey), 100);
+
     const attackerRole = victimRole === 'host' ? 'guest' : 'host';
-    
-    let amount = 5; 
-    if (damageType === 'grenade') {
-      const maxRange = 150;
-      const rawDamage = 70 * (1 - (dist / maxRange));
-      amount = Math.max(0, Math.floor(rawDamage));
-    }
+    let amount = damageType === 'grenade' ? Math.max(0, Math.floor(70 * (1 - (dist / 150)))) : 5;
 
     if (target === 'player') {
-      if (r.overHealth[victimRole] > 0) {
-        r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - amount);
-      } else {
-        r.health[victimRole] = Math.max(0, r.health[victimRole] - amount);
-      }
+      if (r.overHealth[victimRole] > 0) r.overHealth[victimRole] = Math.max(0, r.overHealth[victimRole] - amount);
+      else r.health[victimRole] = Math.max(0, r.health[victimRole] - amount);
     } else if (target === 'shield') {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - amount);
     } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - amount);
-      if (r.health[attackerRole] < 650) {
-        r.health[attackerRole] = Math.min(650, r.health[attackerRole] + 5);
-      } else {
-        r.overHealth[attackerRole] = Math.min(300, r.overHealth[attackerRole] + 5);
-      }
+      if (r.health[attackerRole] < 650) r.health[attackerRole] = Math.min(650, r.health[attackerRole] + 5);
+      else r.overHealth[attackerRole] = Math.min(300, r.overHealth[attackerRole] + 5);
     }
-    
-    io.in(roomId).emit('update_game_state', {
-      health: r.health, overHealth: r.overHealth,
-      boxHealth: r.boxHealth, shieldHealth: r.shieldHealth,
-      grenades: r.grenades, 
-      lastHit: { target, attackerRole } 
-    });
+
+    io.in(roomId).emit('update_game_state', { ...r, lastHit: { target, attackerRole } });
   });
 
   socket.on('disconnect', () => {
@@ -88,5 +80,4 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(process.env.PORT || 3001);
