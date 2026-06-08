@@ -11,7 +11,7 @@ const io = new Server(server, {
     origin: ["https://deatwin.netlify.app", "http://localhost:3000"], 
     methods: ["GET", "POST"] 
   },
-  transports: ["websocket"] // High-speed transport
+  transports: ["websocket"]
 });
 
 const rooms = {};
@@ -22,11 +22,9 @@ io.on('connection', (socket) => {
   socket.on('join_game', ({ roomId }) => {
     if (!roomId) return;
 
-    // CRITICAL: Actually join the socket.io room
     socket.join(roomId);
 
     if (!rooms[roomId]) {
-      // Create room if it doesn't exist
       rooms[roomId] = {
         host: socket.id, 
         guest: null,
@@ -37,21 +35,15 @@ io.on('connection', (socket) => {
       };
       socket.emit('assign_role', { role: 'host' });
     } else if (!rooms[roomId].guest) {
-      // Second player joins
       rooms[roomId].guest = socket.id;
       socket.emit('assign_role', { role: 'guest' });
-      
-      // Start the game for EVERYONE in the room
       io.in(roomId).emit('start_countdown');
     } else {
-      // Handle reconnection: Check if this socket should be host or guest
-      // (Simplified: if room is full, just assign based on arrival)
       socket.emit('assign_role', { role: 'guest' });
     }
   });
 
   socket.on('move_all', (d) => {
-    // Use socket.to(roomId) so sender doesn't get their own move back
     socket.to(d.roomId).emit('opp_move_all', {
         shooter: d.shooter,
         shield: d.shield,
@@ -77,7 +69,6 @@ io.on('connection', (socket) => {
       r.shieldHealth[victimRole] = Math.max(0, r.shieldHealth[victimRole] - dmg);
     } else if (target === 'box') {
       r.boxHealth[victimRole] = Math.max(0, r.boxHealth[victimRole] - dmg);
-      // Lifesteal logic
       if (r.health[attacker] < 650) {
         r.health[attacker] = Math.min(650, r.health[attacker] + 5);
       } else {
@@ -92,7 +83,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnecting', () => {
-    // Clean up rooms when someone leaves
     socket.rooms.forEach(rid => {
       if (rooms[rid]) {
         console.log(`Room ${rid} closed due to disconnect`);
